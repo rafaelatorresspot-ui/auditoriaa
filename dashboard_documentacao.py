@@ -235,21 +235,21 @@ def main():
     # -------------------------------------------------------------
     # Sidebar — atualização
     # -------------------------------------------------------------
-    with st.sidebar:
-        st.header("⚙️ Painel")
-        if st.button("🔄 Atualizar dados agora", use_container_width=True):
-            with st.spinner("Rodando varredura das pastas e cruzamento com o Gerencial... "
-                             "isso pode levar alguns minutos."):
-                ok, log = rodar_atualizacao()
-            if ok:
-                st.success("Base atualizada com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
-            else:
-                st.error("Falha ao atualizar a base. Veja o log abaixo.")
-                with st.expander("Log da execução"):
-                    st.code(log)
-        st.divider()
+    # with st.sidebar:
+    #     st.header("⚙️ Painel")
+    #     if st.button("🔄 Atualizar dados agora", use_container_width=True):
+    #         with st.spinner("Rodando varredura das pastas e cruzamento com o Gerencial... "
+    #                          "isso pode levar alguns minutos."):
+    #             ok, log = rodar_atualizacao()
+    #         if ok:
+    #             st.success("Base atualizada com sucesso!")
+    #             st.cache_data.clear()
+    #             st.rerun()
+    #         else:
+    #             st.error("Falha ao atualizar a base. Veja o log abaixo.")
+    #             with st.expander("Log da execução"):
+    #                 st.code(log)
+    #     st.divider()
 
     # -------------------------------------------------------------
     # Cabeçalho
