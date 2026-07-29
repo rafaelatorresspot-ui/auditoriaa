@@ -70,8 +70,8 @@ GERENCIAL_PATH = r"K:\5. BRACELL\1. RH\2. Gerencial\GERENCIAL.xlsx"
 ABAS_GERENCIAL = [
     # (nome_da_aba, linha_do_cabecalho_0indexed, status_fixo, coluna_do_nome, coluna_da_equipe_ou_None)
     ("GERENCIAL", 2, "Ativo", "NOME", "SUPERVISOR"),
-    ("RESCISÃO", 0, "Inativo", "NOME", None),
-    ("AFASTAMENTOS", 0, "Afastado", "NOME", None),
+    ("RESCISÃO", 0, "Inativo", "NOME", "SUPERVISOR"),
+    ("AFASTAMENTOS", 0, "Afastado", "NOME", "SUPERVISOR"),
 ]
 
 # Se um colaborador aparecer em mais de uma aba (ex: base desatualizada),
@@ -224,9 +224,6 @@ def varrer_pastas(pasta_raiz: str, data_corte_ts: float = None, caminhos_anterio
     return pd.DataFrame(registros), pd.DataFrame(nao_classificados), caminhos_reaproveitados
 
 
-
-
-
 def documentos_obrigatorios_vigentes(data_referencia=None) -> set:
     """Retorna o conjunto de documentos obrigatórios que já estão 'em
     cobrança' na data de referência (hoje, por padrão), considerando a
@@ -241,10 +238,33 @@ def documentos_obrigatorios_vigentes(data_referencia=None) -> set:
     return vigentes
 
 
+def colunas_matriz_pendencias() -> list:
+    """Lista fixa de colunas da matriz de pendências. Usada tanto para
+    garantir o formato correto quando 0 pastas precisam ser reprocessadas
+    (todas reaproveitadas) quanto para selecionar as colunas certas ao
+    reaproveitar linhas do resultado anterior."""
+    cols = ["UF", "Coligada", "Nome", "Nome_Normalizado", "Caminho"]
+    cols += [f"OBR__{doc}" for doc in PADROES_OBRIGATORIOS]
+    cols += [f"COMP__{doc}" for doc in PADROES_COMPLEMENTARES]
+    cols += [
+        "Qtd_Pendencias_Obrigatorias", "Qtd_Pendencias_Complementares",
+        "Qtd_Pendencias_Total", "Tem_Pendencia_Qualquer",
+        "Pendencias_Obrigatorias", "Pendencias_Complementares",
+        "Status_Documental",
+    ]
+    return cols
+
+
 def montar_matriz_pendencias(df_pastas: pd.DataFrame, data_referencia=None) -> pd.DataFrame:
     """Expande os documentos encontrados em colunas booleanas (uma por tipo)
     e calcula as pendências de cada colaborador, respeitando a vigência de
     cada documento obrigatório."""
+    if df_pastas.empty:
+        # sem isso, um DataFrame vazio não tem NENHUMA coluna (nem
+        # "Nome_Normalizado"), o que quebra o merge em cruzar_com_gerencial
+        # quando 100% das pastas foram reaproveitadas (0 reprocessadas)
+        return pd.DataFrame(columns=colunas_matriz_pendencias())
+
     todos_obrigatorios = list(PADROES_OBRIGATORIOS.keys())
     todos_complementares = list(PADROES_COMPLEMENTARES.keys())
     obrigatorios_vigentes = documentos_obrigatorios_vigentes(data_referencia)
@@ -397,6 +417,7 @@ def publicar_no_github(mensagem: str = None):
     comandos = [
         ["git", "-C", str(CAMINHO_REPO_GIT), "add", "dados"],
         ["git", "-C", str(CAMINHO_REPO_GIT), "commit", "-m", mensagem],
+        ["git", "-C", str(CAMINHO_REPO_GIT), "pull", "--rebase", "--autostash"],
         ["git", "-C", str(CAMINHO_REPO_GIT), "push"],
     ]
     log = ""
@@ -409,6 +430,14 @@ def publicar_no_github(mensagem: str = None):
             # significa que a base não mudou desde o último push
             if "nothing to commit" in saida or "nada adicionado" in saida:
                 continue
+            if "pull" in cmd and "rebase" in cmd:
+                # rebase deu conflito — aborta pra não deixar o clone num
+                # estado quebrado, e reporta como falha real (precisa de
+                # intervenção manual: outra fonte alterou os mesmos arquivos)
+                subprocess.run(["git", "-C", str(CAMINHO_REPO_GIT), "rebase", "--abort"],
+                                capture_output=True, text=True)
+                log += "(rebase abortado — resolva o conflito manualmente antes de rodar de novo)\n"
+                return False, log
             return False, log
     return True, log
 
@@ -448,7 +477,7 @@ def main():
     # inteiro logo abaixo, pois o GERENCIAL.xlsx pode ter mudado mesmo sem
     # a pasta do promotor ter mudado.
     if caminhos_reaproveitados:
-        colunas_matriz = [c for c in df_matriz_novas.columns]
+        colunas_matriz = colunas_matriz_pendencias()
         df_matriz_antigas = df_anterior[df_anterior["Caminho"].isin(caminhos_reaproveitados)][
             [c for c in colunas_matriz if c in df_anterior.columns]
         ]
